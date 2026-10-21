@@ -206,6 +206,16 @@ input:focus{border-color:var(--ink)}
 .mi.ok .check{background:var(--ok);border-color:var(--ok);color:#fff}
 .mi.ok .check svg{opacity:1;transform:scale(1)}
 
+/* bloqueio */
+#trava{position:fixed;inset:0;z-index:100;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center}
+#trava.on{display:flex}
+#trava .cad{width:74px;height:74px;border-radius:24px;background:var(--ink);color:var(--bg);display:grid;place-items:center;margin-bottom:8px}
+#trava .cad svg{width:34px;height:34px}
+#trava .logo{font-size:30px}
+#trava p{color:var(--muted);margin:0 0 10px;min-height:1.2em;font-size:14px}
+#trava .btn{max-width:280px}
+#trava .link{border:0;background:none;color:var(--muted);font-size:13.5px;text-decoration:underline;margin-top:6px;padding:8px}
+
 /* novidades */
 .topo-btns{display:flex;gap:8px}
 .sino{position:relative}
@@ -234,6 +244,13 @@ input:focus{border-color:var(--ink)}
 <div id="app"></div>
 <div id="sheet"></div>
 <div id="toast"></div>
+<div id="trava">
+  <div class="cad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg></div>
+  <div class="logo">nossas coisinhas<span class="hrt">♥</span></div>
+  <p id="trava-msg">Toque para desbloquear</p>
+  <button class="btn pri" id="trava-btn">Desbloquear com Face ID</button>
+  <button class="link" id="trava-senha">Entrar com a senha</button>
+</div>
 
 <script>
 /* ===== CONFIGURAÇÃO — cole aqui o firebaseConfig do seu projeto ===== */
@@ -452,7 +469,62 @@ function sheetNovidades(){
   render();
 }
 
+/* ---------- bloqueio com Face ID (WebAuthn / chave de acesso) ---------- */
+const TRAVA_KEY = 'nc_trava_cred';
+const travaAtiva = () => !!localStorage.getItem(TRAVA_KEY);
+const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const unb64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+let travado = false, escondidoEm = 0, desbloqueando = false;
+
+async function ativarTrava(){
+  if (!window.PublicKeyCredential || !navigator.credentials) return toast('Este aparelho não tem suporte');
+  try {
+    const cred = await navigator.credentials.create({publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: {name: 'Nossas Coisinhas'},
+      user: {id: crypto.getRandomValues(new Uint8Array(16)), name: (user && user.email) || 'coisinhas', displayName: meuNome()},
+      pubKeyCredParams: [{type: 'public-key', alg: -7}, {type: 'public-key', alg: -257}],
+      authenticatorSelection: {authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged'},
+      timeout: 60000, attestation: 'none'
+    }});
+    localStorage.setItem(TRAVA_KEY, b64(cred.rawId));
+    toast('Bloqueio ativado 🔒');
+  } catch(e){ toast('Não foi possível ativar o bloqueio'); }
+}
+function desativarTrava(){ localStorage.removeItem(TRAVA_KEY); toast('Bloqueio desativado'); }
+
+function mostrarTrava(){
+  $('#trava').classList.toggle('on', travado);
+  $('#trava-senha').style.display = DEMO ? 'none' : '';
+}
+function travar(){
+  if (!travaAtiva()) return;
+  travado = true; fecharSheet(); mostrarTrava();
+  $('#trava-msg').textContent = 'Toque para desbloquear';
+}
+async function desbloquear(automatico){
+  if (desbloqueando) return;
+  desbloqueando = true;
+  try {
+    await navigator.credentials.get({publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{type: 'public-key', id: unb64(localStorage.getItem(TRAVA_KEY))}],
+      userVerification: 'required', timeout: 60000
+    }});
+    travado = false; mostrarTrava();
+  } catch(e){
+    if (!automatico) $('#trava-msg').textContent = 'Não deu certo. Toque para tentar de novo.';
+  } finally { desbloqueando = false; }
+}
+$('#trava-btn').onclick = () => desbloquear(false);
+$('#trava-senha').onclick = () => { if (!DEMO) firebase.auth().signOut().then(() => location.reload()); };
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden){ escondidoEm = Date.now(); return; }
+  if (travaAtiva() && !travado && escondidoEm && Date.now() - escondidoEm > 60000){ travar(); desbloquear(true); }
+});
+
 function iniciar(){
+  if (travaAtiva() && !sessionStorage.getItem('nc_destravado')){ travar(); desbloquear(true); }
   assinarAtividade();
   DB.watchMercado(l => { state.mercado = l; render(); });
   DB.watchConfig(c => { state.config = c; render(); });
@@ -849,6 +921,8 @@ function sheetAjustes(){
     </div>
     ${!DEMO ? `<label>Seu nome (aparece em "pago por")<input id="n-eu" value="${esc(user.displayName || '')}" placeholder="${esc((user.email || '').split('@')[0])}"></label>` : ''}
     <button class="btn ghost" id="b-nomes">Salvar nomes</button>
+    <div class="flabel" style="margin-top:22px">Segurança · só neste aparelho</div>
+    <button class="r" id="b-trava"><span class="x"><b>🔒 Bloquear com Face ID</b><span>${travaAtiva() ? 'Ativado: pede Face ID ao abrir o app' : 'Desativado'}</span></span><span class="v">${travaAtiva() ? 'desativar' : 'ativar'}</span></button>
     <div class="flabel" style="margin-top:22px">Contas que se repetem · ${ativas.length}</div>
     <div class="rows">${ativas.map(ct => `<button class="r" data-c="${ct.id}" style="--c:${corDono(ct.dono)}"><span class="d"></span><span class="x"><b>${esc(ct.nome)}</b><span>${esc(nomeDono(ct.dono))} · ${desc(ct)}</span></span><span class="v">${ct.tipo === 'variavel' ? 'varia' : mostra(ct.valor, true)}</span></button>`).join('') || '<div class="nota">Nenhuma ainda.</div>'}</div>
     ${!state.contas.length ? '<button class="btn acc" id="b-imp">Importar planilha de outubro/26</button>' : ''}
@@ -859,6 +933,10 @@ function sheetAjustes(){
     await DB.set('config', 'geral', {nomeA: val(c, 'n-a').trim() || 'EMS', nomeB: val(c, 'n-b').trim() || 'LÁ'}, true);
     if (!DEMO){ const n = val(c, 'n-eu').trim(); if (n !== (user.displayName || '')) await user.updateProfile({displayName: n}); }
     fecharSheet(); toast('Salvo');
+  };
+  c.querySelector('#b-trava').onclick = async () => {
+    if (travaAtiva()) desativarTrava(); else await ativarTrava();
+    sheetAjustes();
   };
   const bi = c.querySelector('#b-imp'); if (bi) bi.onclick = () => { fecharSheet(); importarOutubro(); };
   const bl = c.querySelector('#b-limpar'); if (bl) bl.onclick = () => { if (confirm('Apagar tudo do demo?')) DB.limpar(); };
@@ -949,9 +1027,10 @@ function telaLogin(){
     const P = firebase.auth.Auth.Persistence;
     try {
       await firebase.auth().setPersistence($('#l-lembrar').checked ? P.LOCAL : P.SESSION);
+      sessionStorage.setItem('nc_destravado', '1'); // acabou de digitar a senha: não pede Face ID de novo agora
       await firebase.auth().signInWithEmailAndPassword(login, $('#l-senha').value);
     }
-    catch(e){ $('#l-err').textContent = ({'auth/wrong-password': 'Senha incorreta', 'auth/user-not-found': 'Usuário não encontrado', 'auth/invalid-email': 'Nome inválido', 'auth/invalid-credential': 'Nome ou senha incorretos', 'auth/too-many-requests': 'Muitas tentativas, espera um pouco'})[e.code] || e.message; }
+    catch(e){ sessionStorage.removeItem('nc_destravado'); $('#l-err').textContent =({'auth/wrong-password': 'Senha incorreta', 'auth/user-not-found': 'Usuário não encontrado', 'auth/invalid-email': 'Nome inválido', 'auth/invalid-credential': 'Nome ou senha incorretos', 'auth/too-many-requests': 'Muitas tentativas, espera um pouco'})[e.code] || e.message; }
   };
   $('#l-form').onsubmit = e => { e.preventDefault(); go(); };
 }
