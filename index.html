@@ -177,6 +177,9 @@ input:focus{border-color:var(--ink)}
 /* toast + confete */
 #toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:14px;font-weight:700;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;width:max-content;max-width:calc(100vw - 32px);text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
+#toast.acao{display:flex;align-items:center;gap:10px;text-align:left}
+#toast.acao.on{pointer-events:auto}
+#toast button{flex:none;border:0;background:color-mix(in srgb,var(--bg) 20%,transparent);color:var(--bg);font-weight:700;font-size:13.5px;border-radius:9px;padding:6px 10px}
 
 /* abas */
 .abas{display:flex;background:var(--soft);border-radius:14px;padding:4px;margin:12px 0 0}
@@ -200,6 +203,10 @@ input:focus{border-color:var(--ink)}
 .mi .x{flex:1;min-width:0}
 .mi .x b{display:block;font-size:15.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mi .x small{font-size:11.5px;color:var(--muted)}
+.add-merc input.preco{flex:none;width:84px}
+.quero{flex:none;border:1.5px solid var(--line);background:transparent;color:var(--muted);border-radius:11px;padding:5px 9px;font-size:14px;font-weight:700}
+.quero.on{border-color:var(--c-b);color:#fff;background:var(--c-b)}
+.junto{font-size:12.5px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .mi .del{border:0;background:none;color:var(--muted);font-size:20px;line-height:1;width:32px;height:32px;border-radius:10px;flex:none}
 .mi.ok{opacity:.55}
 .mi.ok .x b{text-decoration:line-through;text-decoration-color:var(--muted)}
@@ -226,6 +233,10 @@ input:focus{border-color:var(--ink)}
 .atv{padding:11px 2px;border-bottom:1px solid var(--line);font-size:14.5px}
 .atv:last-child{border-bottom:0}
 .atv small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.atv .reac{font-size:15px;margin-left:2px}
+.reacs{display:flex;gap:6px;margin-top:8px}
+.reacs button{border:1.5px solid var(--line);background:var(--card);border-radius:12px;font-size:17px;padding:4px 10px;line-height:1.2}
+.reacs button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--card))}
 .atv.nova{position:relative;padding-left:14px}
 .atv.nova::before{content:"";position:absolute;left:0;top:17px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
 .cf{position:fixed;top:-20px;z-index:70;pointer-events:none;font-size:22px;animation:cair linear forwards}
@@ -288,6 +299,7 @@ function lerValor(s){
   s = String(s || '').replace(/[R$\s]/g, '');
   if (!s) return null;
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');   // 3.500 = três mil e quinhentos
   const n = Number(s);
   return isNaN(n) ? null : Math.round(n * 100) / 100;
 }
@@ -298,7 +310,7 @@ function LocalDB(){
   const KEY = 'nossas_coisinhas_demo';
   let d; try { d = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
   d = d || {};
-  ['contas','itens','meses','config','atividade','mercado'].forEach(k => d[k] = d[k] || {});
+  ['contas','itens','meses','config','atividade','mercado','desejos'].forEach(k => d[k] = d[k] || {});
   const subs = new Set(); let t = null;
   const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch(e) {} clearTimeout(t); t = setTimeout(() => subs.forEach(f => f()), 0); };
   const sub = f => { subs.add(f); setTimeout(f, 0); return () => subs.delete(f); };
@@ -312,11 +324,19 @@ function LocalDB(){
     watchConfig: cb => sub(() => cb(d.config.geral || {})),
     watchAtividade: cb => sub(() => cb(lista('atividade').sort((a, b) => b.em - a.em).slice(0, 60))),
     watchMercado: cb => sub(() => cb(lista('mercado'))),
-    async add(col, data){ d[col][Math.random().toString(36).slice(2, 12)] = cl(data); salvar(); },
+    watchDesejos: cb => sub(() => cb(lista('desejos'))),
+    async add(col, data){ const id = Math.random().toString(36).slice(2, 12); d[col][id] = cl(data); salvar(); return id; },
+    async restaurarNoMes(ym, contaId, itemId, data){
+      const m = d.meses[ym] || {}; m.removidos = (m.removidos || []).filter(x => x !== contaId); d.meses[ym] = m;
+      d.itens[itemId] = cl(data); salvar();
+    },
     novoId: () => Math.random().toString(36).slice(2, 12),
     async set(col, id, data, merge){ escrever(col, id, data, merge); salvar(); },
     async del(col, id){ delete d[col][id]; salvar(); },
-    async criarSeNaoExiste(col, id, data){ if (!d[col][id]) { d[col][id] = cl(data); salvar(); } },
+    async criarItemDoMes(ym, contaId, id, data){
+      if (d.itens[id] || ((d.meses[ym] || {}).removidos || []).includes(contaId)) return;
+      d.itens[id] = cl(data); salvar();
+    },
     async lote(ops){ ops.forEach(o => o.del ? delete d[o.col][o.id] : escrever(o.col, o.id, o.data, o.merge)); salvar(); },
     async removerDoMes(ym, contaId, itemId){
       const m = d.meses[ym] || {}; m.removidos = [...new Set([...(m.removidos || []), contaId])]; d.meses[ym] = m;
@@ -339,13 +359,25 @@ function FireDB(){
     watchConfig: cb => db.collection('config').doc('geral').onSnapshot(s => cb(s.exists ? s.data() : {}), erro),
     watchAtividade: cb => db.collection('atividade').orderBy('em', 'desc').limit(60).onSnapshot(s => cb(map(s)), erro),
     watchMercado: cb => db.collection('mercado').onSnapshot(s => cb(map(s)), erro),
-    add: (col, data) => db.collection(col).add(data),
+    watchDesejos: cb => db.collection('desejos').onSnapshot(s => cb(map(s)), erro),
+    add: (col, data) => db.collection(col).add(data).then(r => r.id),
+    restaurarNoMes: (ym, contaId, itemId, data) => {
+      const b = db.batch();
+      b.set(db.collection('meses').doc(ym), {removidos: firebase.firestore.FieldValue.arrayRemove(contaId)}, {merge: true});
+      b.set(db.collection('itens').doc(itemId), data);
+      return b.commit();
+    },
     novoId: () => db.collection('_').doc().id,
     set: (col, id, data, merge) => db.collection(col).doc(id).set(data, {merge: !!merge}),
     del: (col, id) => db.collection(col).doc(id).delete(),
-    criarSeNaoExiste: (col, id, data) => {
-      const r = db.collection(col).doc(id);
-      return db.runTransaction(async t => { const s = await t.get(r); if (!s.exists) t.set(r, data); });
+    // cria a conta do mês só se ela não existe E não foi removida daquele mês (checado no banco, na hora)
+    criarItemDoMes: (ym, contaId, id, data) => {
+      const r = db.collection('itens').doc(id), rm = db.collection('meses').doc(ym);
+      return db.runTransaction(async t => {
+        const [s, m] = await Promise.all([t.get(r), t.get(rm)]);
+        if (s.exists || ((m.exists && m.data().removidos) || []).includes(contaId)) return;
+        t.set(r, data);
+      });
     },
     lote: ops => {
       const b = db.batch();
@@ -368,7 +400,8 @@ const state = {
   ym: HOJE_YM, contas: [], itens: [], mes: {}, config: {},
   ok: {contas: false, itens: false, mes: false},
   filtro: 'tudo', verPagas: localStorage.getItem('nc_verPagas') !== '0',
-  aba: localStorage.getItem('nc_aba') === 'mercado' ? 'mercado' : 'contas',
+  aba: ['mercado', 'desejos'].includes(localStorage.getItem('nc_aba')) ? localStorage.getItem('nc_aba') : 'contas',
+  desejos: [],
   oculto: localStorage.getItem('nc_oculto') === '1',
   mercado: [], atividade: []
 };
@@ -409,7 +442,7 @@ function sincronizar(){
     const id = ym + '_' + c.id;
     if (criando.has(id)) return;
     criando.add(id);
-    DB.criarSeNaoExiste('itens', id, it).finally(() => criando.delete(id));
+    DB.criarItemDoMes(ym, c.id, id, it).catch(() => {}).finally(() => criando.delete(id));
   });
 }
 
@@ -428,8 +461,17 @@ const meuNome = () => DEMO ? 'Você' : (quem() || 'alguém');
 const chaveVisto = () => 'nc_visto_' + meuUid();
 const visto = () => Number(localStorage.getItem(chaveVisto()) || 0);
 const naoVistas = () => (state.atividade || []).filter(a => a.uid !== meuUid() && a.em > visto());
-function registrar(texto){
-  DB.add('atividade', {texto, quem: meuNome(), uid: meuUid(), mes: state.ym, em: Date.now()}).catch(() => {});
+// devolve o id do registro (para o "Desfazer" poder apagar o aviso)
+function registrar(texto, extra){
+  return DB.add('atividade', {texto, quem: meuNome(), uid: meuUid(), mes: state.ym, em: Date.now(), ...(extra || {})}).catch(() => null);
+}
+const REACOES = ['❤️', '👏', '😂', '🙏'];
+async function reagir(a, emoji){
+  if (!a || a.uid === meuUid() || a.tipo === 'reacao') return;
+  if ((a.reacoes || {})[meuUid()] === emoji) return;
+  await DB.set('atividade', a.id, {reacoes: {...(a.reacoes || {}), [meuUid()]: emoji}}, true);
+  registrar(`mandou ${emoji} — “${a.texto}”`, {tipo: 'reacao', para: a.uid});
+  toast(`${emoji} enviado`);
 }
 function quando(ms){
   const s = (Date.now() - ms) / 1000;
@@ -448,7 +490,11 @@ function assinarAtividade(){
   DB.watchAtividade(l => {
     if (idsAtiv){
       const deles = l.filter(a => !idsAtiv.has(a.id) && a.uid !== meuUid());
-      if (deles.length === 1) toast(`${deles[0].quem} ${semValores(deles[0].texto)}`, 3800);
+      if (deles.length === 1){
+        const a = deles[0];
+        toast(`${a.quem} ${semValores(a.texto)}`, a.tipo === 'reacao' ? 4000 : 6000,
+              a.tipo === 'reacao' ? null : [{rotulo: '❤️', fn: () => reagir(a, '❤️')}]);
+      }
       else if (deles.length > 1) toast(`${deles[0].quem} fez ${deles.length} alterações`, 3800);
     }
     idsAtiv = new Set(l.map(a => a.id));
@@ -463,8 +509,17 @@ function sheetNovidades(){
     <div class="atvs">${l.length ? l.map(a => {
       const eu = a.uid === meuUid();
       const mes = a.mes ? ' · ' + MESES[+a.mes.slice(5) - 1] : '';
-      return `<div class="atv ${!eu && a.em > ultimo ? 'nova' : ''}"><b>${eu ? 'Você' : esc(a.quem)}</b> ${esc(semValores(a.texto))}<small>${quando(a.em)}${mes}</small></div>`;
+      const recebidas = Object.entries(a.reacoes || {}).filter(([u]) => u !== meuUid()).map(([, e]) => e).join(' ');
+      const minha = (a.reacoes || {})[meuUid()];
+      const botoes = !eu && a.tipo !== 'reacao'
+        ? `<div class="reacs">${REACOES.map(e => `<button data-reagir="${a.id}" data-emoji="${e}" class="${minha === e ? 'on' : ''}">${e}</button>`).join('')}</div>` : '';
+      return `<div class="atv ${!eu && a.em > ultimo ? 'nova' : ''}"><b>${eu ? 'Você' : esc(a.quem)}</b> ${esc(semValores(a.texto))}${recebidas ? ` <span class="reac">${recebidas}</span>` : ''}<small>${quando(a.em)}${mes}</small>${botoes}</div>`;
     }).join('') : '<div class="nota">Nada por aqui ainda. Quando um de vocês mexer em alguma conta, aparece aqui.</div>'}</div>`);
+  $('#sheet').querySelectorAll('[data-reagir]').forEach(b => b.onclick = async () => {
+    const a = (state.atividade || []).find(x => x.id === b.dataset.reagir);
+    await reagir(a, b.dataset.emoji);
+    b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  });
   localStorage.setItem(chaveVisto(), String(Date.now()));
   render();
 }
@@ -527,6 +582,7 @@ function iniciar(){
   if (travaAtiva() && !sessionStorage.getItem('nc_destravado')){ travar(); desbloquear(true); }
   assinarAtividade();
   DB.watchMercado(l => { state.mercado = l; render(); });
+  DB.watchDesejos(l => { state.desejos = l; render(); });
   DB.watchConfig(c => { state.config = c; render(); });
   DB.watchContas(l => { state.contas = l; state.ok.contas = true; sincronizar(); render(); });
   assinarMes();
@@ -617,10 +673,10 @@ function render(){
   }
 
   const pendMerc = state.mercado.filter(m => !m.feito).length;
-  const merc = state.aba === 'mercado';
-  // guarda o que está sendo digitado na lista de mercado (a tela redesenha a cada mudança)
-  const inpAntes = $('#m-novo');
-  const salvoInp = inpAntes ? {v: inpAntes.value, foco: document.activeElement === inpAntes} : null;
+  const aba = state.aba, merc = aba === 'mercado', des = aba === 'desejos';
+  // guarda o que está sendo digitado nas listas (a tela redesenha a cada mudança)
+  const CAMPOS = ['m-novo', 'd-novo', 'd-preco'];
+  const salvos = CAMPOS.map(id => { const el = $('#' + id); return el ? {id, v: el.value, foco: document.activeElement === el} : null; }).filter(Boolean);
 
   app.innerHTML = `<div class="wrap">
     <header>
@@ -633,10 +689,11 @@ function render(){
     </header>
     ${nNovas ? `<button class="novas" data-acao="novidades">🔔 <b>${nNovas} ${nNovas > 1 ? 'novidades' : 'novidade'}</b> desde sua última visita <span>ver</span></button>` : ''}
     <div class="abas">
-      <button class="${merc ? '' : 'on'}" data-aba="contas">Contas</button>
+      <button class="${aba === 'contas' ? 'on' : ''}" data-aba="contas">Contas</button>
       <button class="${merc ? 'on' : ''}" data-aba="mercado">Mercado${pendMerc ? `<em>${pendMerc}</em>` : ''}</button>
+      <button class="${des ? 'on' : ''}" data-aba="desejos">Desejos</button>
     </div>
-    ${merc ? telaMercado() : `
+    ${merc ? telaMercado() : des ? telaDesejos() : `
     <div class="mesnav">
       <h2>${nomeMes(state.ym).replace(/ (\d+)$/, ' <span>$1</span>')}</h2>
       <div class="arrows"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">${I.esq}</button><button class="icon-btn" data-mes="1" aria-label="Próximo mês">${I.dir}</button></div>
@@ -652,10 +709,74 @@ function render(){
     <div class="donos">${donos}</div>
     ${corpo}`}
   </div>
-  ${merc ? '' : `<button class="fab" data-acao="novo" aria-label="Adicionar">${I.mais}</button>`}`;
+  ${merc || des ? '' : `<button class="fab" data-acao="novo" aria-label="Adicionar">${I.mais}</button>`}`;
 
-  const inp = $('#m-novo');
-  if (inp && salvoInp){ inp.value = salvoInp.v; if (salvoInp.foco){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
+  salvos.forEach(s => {
+    const el = $('#' + s.id); if (!el) return;
+    el.value = s.v;
+    if (s.foco){ el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch(e) {} }
+  });
+}
+
+/* ---------- lista de desejos da casa ---------- */
+function telaDesejos(){
+  const l = state.desejos;
+  const nQuer = d => Object.values(d.querem || {}).filter(Boolean).length;
+  const queremos = l.filter(d => !d.comprado).sort((a, b) => nQuer(b) - nQuer(a) || a.criadoEm - b.criadoEm);
+  const comprados = l.filter(d => d.comprado).sort((a, b) => (b.compradoEm || 0) - (a.compradoEm || 0));
+  const totalJunto = queremos.reduce((s, d) => s + (Number(d.preco) || 0), 0);
+  const linha = d => {
+    const nomes = Object.entries(d.querem || {}).filter(([, v]) => v).map(([u, v]) => u === meuUid() ? 'você' : esc(v));
+    const euQuero = !!(d.querem || {})[meuUid()];
+    const sub = d.comprado
+      ? `comprado${d.compradoPor && d.compradoPor !== meuNome() ? ' por ' + esc(d.compradoPor) : ''}${d.preco ? ' · R$ ' + mostra(d.preco, true) : ''}`
+      : [d.preco ? 'R$ ' + mostra(d.preco, true) : '', nomes.length ? '♥ ' + nomes.join(', ') : ''].filter(Boolean).join(' · ') || 'toque no ♥ se quiser muito';
+    return `<div class="mi ${d.comprado ? 'ok' : ''}">
+      <button class="check" data-dcomp="${d.id}" aria-label="Comprado">${I.check}</button>
+      <div class="x"><b>${esc(d.nome)}</b><small>${sub}</small></div>
+      ${d.comprado ? '' : `<button class="quero ${euQuero ? 'on' : ''}" data-dquer="${d.id}" aria-label="Quero muito">♥${nQuer(d) ? ` ${nQuer(d)}` : ''}</button>`}
+      <button class="del" data-ddel="${d.id}" aria-label="Tirar da lista">×</button></div>`;
+  };
+  return `
+    <div class="add-merc">
+      <input id="d-novo" placeholder="O que vocês querem pra casa?" enterkeyhint="next" autocomplete="off">
+      <input id="d-preco" class="preco" inputmode="decimal" placeholder="R$" enterkeyhint="done" autocomplete="off">
+      <button data-acao="addDesejo" aria-label="Adicionar">${I.mais}</button>
+    </div>
+    <div class="dica">O preço é opcional. Toque no ♥ do que você quer muito — os mais queridos sobem.</div>
+    ${!l.length ? `<div class="vazio"><h4>Nada na lista ainda 🎁</h4><p>Sofá novo? Air fryer? Coloca aqui o que vocês querem comprar com calma.</p></div>` : `
+    <div class="sec"><h3>Queremos<em>${queremos.length}</em></h3>${totalJunto ? `<span class="junto">tudo junto: R$ ${mostra(totalJunto, true)}</span>` : ''}</div>
+    <div class="lista">${queremos.length ? queremos.map(linha).join('') : '<div class="tudo-pago"><b>lista zerada!</b>compraram tudo 🎉</div>'}</div>
+    ${comprados.length ? `<div class="sec"><h3>Já compramos 🎉<em>${comprados.length}</em></h3></div>
+    <div class="lista">${comprados.map(linha).join('')}</div>` : ''}`}`;
+}
+async function addDesejo(){
+  const n = $('#d-novo'), p = $('#d-preco'); if (!n) return;
+  const nome = n.value.trim(); if (!nome) return toast('Escreve o que vocês querem');
+  const preco = lerValor(p.value);
+  n.value = ''; p.value = ''; n.focus();
+  await DB.set('desejos', DB.novoId(), {nome: nome.charAt(0).toUpperCase() + nome.slice(1), preco, quem: meuNome(), uid: meuUid(),
+    criadoEm: Date.now(), querem: {[meuUid()]: meuNome()}, comprado: false});
+  registrar(`colocou ${nome} na lista de desejos`);
+}
+async function comprarDesejo(d){
+  const comprado = !d.comprado;
+  const antes = {comprado: !!d.comprado, compradoEm: d.compradoEm || null, compradoPor: d.compradoPor || null};
+  await DB.set('desejos', d.id, {comprado, compradoEm: comprado ? Date.now() : null, compradoPor: comprado ? meuNome() : null}, true);
+  if (!comprado) return;
+  const idAtv = await registrar(`comprou ${d.nome} da lista de desejos 🎉`);
+  toast(`${d.nome} comprado! 🎉`, 5000, desfazer(async () => {
+    await DB.set('desejos', d.id, antes, true);
+    if (idAtv) DB.del('atividade', idAtv);
+  }));
+}
+// tira um item de uma lista (mercado ou desejos) com opção de desfazer
+async function tirarDaLista(col, id){
+  const lista = col === 'mercado' ? state.mercado : state.desejos;
+  const item = lista.find(x => x.id === id); if (!item) return;
+  const copia = {...item}; delete copia.id;
+  await DB.del(col, id);
+  toast(`${item.nome} saiu da lista`, 5000, desfazer(() => DB.set(col, id, copia)));
 }
 
 /* ---------- lista de mercado ---------- */
@@ -700,18 +821,25 @@ async function addMercado(){
 async function limparMercado(){
   const feitos = state.mercado.filter(m => m.feito);
   if (!feitos.length) return;
-  if (!confirm(`Tirar ${feitos.length} ${feitos.length > 1 ? 'itens comprados' : 'item comprado'} da lista?`)) return;
   await DB.lote(feitos.map(m => ({col: 'mercado', id: m.id, del: true})));
-  toast('Lista limpa ✓');
+  toast(`${feitos.length} ${feitos.length > 1 ? 'itens tirados' : 'item tirado'} da lista ✓`, 5000, desfazer(() =>
+    DB.lote(feitos.map(m => { const c = {...m}; delete c.id; return {col: 'mercado', id: m.id, data: c}; }))));
 }
 
 /* ---------- eventos ---------- */
 document.addEventListener('click', e => {
   if (!DB || e.target.closest('#sheet')) return;
-  const el = e.target.closest('[data-acao],[data-mes],[data-filtro],[data-check],[data-aba],[data-mdel],[data-merc],.item');
+  const el = e.target.closest('[data-acao],[data-mes],[data-filtro],[data-check],[data-aba],[data-mdel],[data-merc],[data-ddel],[data-dquer],[data-dcomp],.item');
   if (!el) return;
   if (el.dataset.aba){ state.aba = el.dataset.aba; localStorage.setItem('nc_aba', state.aba); render(); window.scrollTo({top: 0}); return; }
-  if (el.dataset.mdel){ DB.del('mercado', el.dataset.mdel); return; }
+  if (el.dataset.mdel){ tirarDaLista('mercado', el.dataset.mdel); return; }
+  if (el.dataset.ddel){ tirarDaLista('desejos', el.dataset.ddel); return; }
+  if (el.dataset.dcomp){ const d = state.desejos.find(x => x.id === el.dataset.dcomp); if (d) comprarDesejo(d); return; }
+  if (el.dataset.dquer){
+    const d = state.desejos.find(x => x.id === el.dataset.dquer); if (!d) return;
+    const quero = !(d.querem || {})[meuUid()];
+    DB.set('desejos', d.id, {querem: {...(d.querem || {}), [meuUid()]: quero ? meuNome() : false}}, true); return;
+  }
   if (el.dataset.merc){
     const m = state.mercado.find(x => x.id === el.dataset.merc); if (!m) return;
     DB.set('mercado', m.id, {feito: !m.feito, feitoEm: Date.now(), feitoPor: meuNome()}, true); return;
@@ -726,22 +854,29 @@ document.addEventListener('click', e => {
   if (a === 'novidades') sheetNovidades();
   if (a === 'addMerc') addMercado();
   if (a === 'limparMerc') limparMercado();
+  if (a === 'addDesejo') addDesejo();
   if (a === 'olho'){ state.oculto = !state.oculto; localStorage.setItem('nc_oculto', state.oculto ? '1' : '0'); render(); }
   if (a === 'importar') importarOutubro();
   if (a === 'verPagas'){ state.verPagas = !state.verPagas; localStorage.setItem('nc_verPagas', state.verPagas ? '1' : '0'); render(); }
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.id === 'm-novo'){ e.preventDefault(); addMercado(); }
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'm-novo'){ e.preventDefault(); addMercado(); }
+  if (e.target.id === 'd-novo' || e.target.id === 'd-preco'){ e.preventDefault(); addDesejo(); }
 });
 
 const FRASES = ['Menos uma! ✨','Riscado da lista ✓','Pago. Respira. 😮‍💨','Boa, time! 💪','Uma a menos pra pensar','Feito ✓'];
 async function alternarPago(it){
   if (!it.pago && it.valor == null){ sheetItem(it, true); return; }
   const pago = !it.pago;
+  const antes = {pago: !!it.pago, pagoEm: it.pagoEm || null, pagoPor: it.pagoPor || null};
   await DB.set('itens', it.id, {pago, pagoEm: pago ? hojeBR() : null, pagoPor: pago ? quem() : null}, true);
-  registrar(pago ? `marcou ${it.nome} como pago` : `desmarcou ${it.nome}`);
-  if (pago) toast(FRASES[Math.floor(Math.random() * FRASES.length)]);
+  const idAtv = await registrar(pago ? `marcou ${it.nome} como pago` : `desmarcou ${it.nome}`);
+  toast(pago ? FRASES[Math.floor(Math.random() * FRASES.length)] : `${it.nome} desmarcada`, 5000, desfazer(async () => {
+    await DB.set('itens', it.id, antes, true);
+    if (idAtv) DB.del('atividade', idAtv);
+  }));
 }
 
 /* ---------- sheets ---------- */
@@ -799,9 +934,14 @@ function sheetItem(it, focarValor){
   if (bc) bc.onclick = () => { const ct = state.contas.find(x => x.id === it.contaId); ct ? sheetConta(ct) : toast('Conta não encontrada'); };
   c.querySelector('#b-rem').onclick = async () => {
     if (!confirm(`Remover "${it.nome}" de ${nomeMes(state.ym)}?` + (it.contaId ? '\nOs outros meses continuam normais.' : ''))) return;
-    if (it.contaId) await DB.removerDoMes(state.ym, it.contaId, it.id); else await DB.del('itens', it.id);
-    registrar(`removeu ${it.nome} deste mês`);
-    fecharSheet(); toast('Removida');
+    const ym = state.ym, copia = {...it}; delete copia.id;
+    if (it.contaId) await DB.removerDoMes(ym, it.contaId, it.id); else await DB.del('itens', it.id);
+    const idAtv = await registrar(`removeu ${it.nome} deste mês`);
+    fecharSheet();
+    toast(`${it.nome} removida`, 5000, desfazer(async () => {
+      if (it.contaId) await DB.restaurarNoMes(ym, it.contaId, it.id, copia); else await DB.set('itens', it.id, copia);
+      if (idAtv) DB.del('atividade', idAtv);
+    }));
   };
 }
 
@@ -996,7 +1136,20 @@ async function importarOutubro(){
 
 /* ---------- toast + confete ---------- */
 let tt;
-function toast(msg, ms){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), ms || 2200); }
+// acoes: [{rotulo, fn}] — botões dentro do aviso (Desfazer, ❤️…)
+function toast(msg, ms, acoes){
+  const t = $('#toast'); t.innerHTML = '';
+  const s = document.createElement('span'); s.textContent = msg; t.appendChild(s);
+  (acoes || []).forEach(a => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = a.rotulo;
+    b.onclick = ev => { ev.stopPropagation(); t.classList.remove('on'); a.fn(); };
+    t.appendChild(b);
+  });
+  t.classList.toggle('acao', !!(acoes && acoes.length));
+  t.classList.add('on'); clearTimeout(tt);
+  tt = setTimeout(() => t.classList.remove('on'), ms || (acoes && acoes.length ? 5000 : 2200));
+}
+const desfazer = fn => [{rotulo: 'Desfazer', fn}];
 function confete(){
   toast('Tudo pago esse mês! 🎉');
   const em = ['🎉','✨','💸','🥂','💛','🎊'];
