@@ -742,22 +742,26 @@ function confete(){
 
 /* ---------- login ---------- */
 function telaLogin(){
-  $('#app').innerHTML = `<div class="login wrap">
+  $('#app').innerHTML = `<form class="login wrap" id="l-form" action="#" method="post" autocomplete="on">
     <div class="logo">nossas coisinhas<span class="hrt">♥</span></div>
     <p>as contas da casa, organizadas a dois.</p>
-    <label>Nome<input type="text" id="l-email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="ex.: timbira"></label>
-    <label>Senha<input type="password" id="l-senha" autocomplete="current-password"></label>
-    <button class="btn pri" id="l-ok">Entrar</button>
-    <div class="err" id="l-err"></div></div>`;
+    <label>Nome<input type="text" id="l-email" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="ex.: timbira"></label>
+    <label>Senha<input type="password" id="l-senha" name="password" autocomplete="current-password"></label>
+    <label class="sw"><input type="checkbox" id="l-lembrar" checked> Manter conectado</label>
+    <button class="btn pri" id="l-ok" type="submit">Entrar</button>
+    <div class="err" id="l-err"></div></form>`;
   const go = async () => {
     $('#l-err').textContent = '';
     let login = $('#l-email').value.trim().toLowerCase();
     if (login && !login.includes('@')) login += DOMINIO_LOGIN;
-    try { await firebase.auth().signInWithEmailAndPassword(login, $('#l-senha').value); }
+    const P = firebase.auth.Auth.Persistence;
+    try {
+      await firebase.auth().setPersistence($('#l-lembrar').checked ? P.LOCAL : P.SESSION);
+      await firebase.auth().signInWithEmailAndPassword(login, $('#l-senha').value);
+    }
     catch(e){ $('#l-err').textContent = ({'auth/wrong-password': 'Senha incorreta', 'auth/user-not-found': 'Usuário não encontrado', 'auth/invalid-email': 'Nome inválido', 'auth/invalid-credential': 'Nome ou senha incorretos', 'auth/too-many-requests': 'Muitas tentativas, espera um pouco'})[e.code] || e.message; }
   };
-  $('#l-ok').onclick = go;
-  $('#l-senha').onkeydown = e => { if (e.key === 'Enter') go(); };
+  $('#l-form').onsubmit = e => { e.preventDefault(); go(); };
 }
 
 /* ---------- início ---------- */
