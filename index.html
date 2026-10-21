@@ -175,8 +175,21 @@ input:focus{border-color:var(--ink)}
 .nota{font-size:12.5px;color:var(--muted);background:var(--soft);border-radius:12px;padding:10px 12px;margin-top:14px}
 
 /* toast + confete */
-#toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:14px;font-weight:700;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:14px;font-weight:700;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;width:max-content;max-width:calc(100vw - 32px);text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* novidades */
+.topo-btns{display:flex;gap:8px}
+.sino{position:relative}
+.badge{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid var(--bg)}
+.novas{display:flex;align-items:center;gap:10px;width:100%;margin:12px 0 0;padding:11px 14px;border-radius:16px;border:1.5px solid color-mix(in srgb,var(--accent) 40%,var(--line));background:color-mix(in srgb,var(--accent) 8%,var(--card));text-align:left;font-size:14px}
+.novas span{margin-left:auto;font-weight:700;color:var(--accent);font-size:13px}
+.atvs{display:flex;flex-direction:column}
+.atv{padding:11px 2px;border-bottom:1px solid var(--line);font-size:14.5px}
+.atv:last-child{border-bottom:0}
+.atv small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.atv.nova{position:relative;padding-left:14px}
+.atv.nova::before{content:"";position:absolute;left:0;top:17px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
 .cf{position:fixed;top:-20px;z-index:70;pointer-events:none;font-size:22px;animation:cair linear forwards}
 @keyframes cair{to{transform:translateY(110vh) rotate(540deg)}}
 @keyframes up{from{transform:translateY(100%)}}
@@ -240,7 +253,7 @@ function LocalDB(){
   const KEY = 'nossas_coisinhas_demo';
   let d; try { d = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
   d = d || {};
-  ['contas','itens','meses','config'].forEach(k => d[k] = d[k] || {});
+  ['contas','itens','meses','config','atividade'].forEach(k => d[k] = d[k] || {});
   const subs = new Set(); let t = null;
   const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch(e) {} clearTimeout(t); t = setTimeout(() => subs.forEach(f => f()), 0); };
   const sub = f => { subs.add(f); setTimeout(f, 0); return () => subs.delete(f); };
@@ -252,6 +265,8 @@ function LocalDB(){
     watchItens: (ym, cb) => sub(() => cb(lista('itens', v => v.mes === ym))),
     watchMes: (ym, cb) => sub(() => cb(d.meses[ym] || {})),
     watchConfig: cb => sub(() => cb(d.config.geral || {})),
+    watchAtividade: cb => sub(() => cb(lista('atividade').sort((a, b) => b.em - a.em).slice(0, 60))),
+    async add(col, data){ d[col][Math.random().toString(36).slice(2, 12)] = cl(data); salvar(); },
     novoId: () => Math.random().toString(36).slice(2, 12),
     async set(col, id, data, merge){ escrever(col, id, data, merge); salvar(); },
     async del(col, id){ delete d[col][id]; salvar(); },
@@ -276,6 +291,8 @@ function FireDB(){
     watchItens: (ym, cb) => db.collection('itens').where('mes', '==', ym).onSnapshot(s => cb(map(s)), erro),
     watchMes: (ym, cb) => db.collection('meses').doc(ym).onSnapshot(s => cb(s.exists ? s.data() : {}), erro),
     watchConfig: cb => db.collection('config').doc('geral').onSnapshot(s => cb(s.exists ? s.data() : {}), erro),
+    watchAtividade: cb => db.collection('atividade').orderBy('em', 'desc').limit(60).onSnapshot(s => cb(map(s)), erro),
+    add: (col, data) => db.collection(col).add(data),
     novoId: () => db.collection('_').doc().id,
     set: (col, id, data, merge) => db.collection(col).doc(id).set(data, {merge: !!merge}),
     del: (col, id) => db.collection(col).doc(id).delete(),
@@ -353,7 +370,55 @@ function assinarMes(){
   render();
 }
 
+/* ---------- atividade / novidades ---------- */
+const meuUid = () => DEMO ? 'demo' : (user && user.uid);
+const meuNome = () => DEMO ? 'Você' : (quem() || 'alguém');
+const chaveVisto = () => 'nc_visto_' + meuUid();
+const visto = () => Number(localStorage.getItem(chaveVisto()) || 0);
+const naoVistas = () => (state.atividade || []).filter(a => a.uid !== meuUid() && a.em > visto());
+function registrar(texto){
+  DB.add('atividade', {texto, quem: meuNome(), uid: meuUid(), mes: state.ym, em: Date.now()}).catch(() => {});
+}
+function quando(ms){
+  const s = (Date.now() - ms) / 1000;
+  if (s < 60) return 'agora';
+  if (s < 3600) return 'há ' + Math.floor(s / 60) + ' min';
+  const d = new Date(ms), h = new Date();
+  const hora = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (d.toDateString() === h.toDateString()) return 'hoje ' + hora;
+  const ontem = new Date(h); ontem.setDate(h.getDate() - 1);
+  if (d.toDateString() === ontem.toDateString()) return 'ontem ' + hora;
+  return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + hora;
+}
+let idsAtiv = null;
+function assinarAtividade(){
+  if (!localStorage.getItem(chaveVisto())) localStorage.setItem(chaveVisto(), String(Date.now()));
+  DB.watchAtividade(l => {
+    if (idsAtiv){
+      const deles = l.filter(a => !idsAtiv.has(a.id) && a.uid !== meuUid());
+      if (deles.length === 1) toast(`${deles[0].quem} ${deles[0].texto}`, 3800);
+      else if (deles.length > 1) toast(`${deles[0].quem} fez ${deles.length} alterações`, 3800);
+    }
+    idsAtiv = new Set(l.map(a => a.id));
+    state.atividade = l; render();
+  });
+}
+function sheetNovidades(){
+  const ultimo = visto();
+  const l = state.atividade || [];
+  abrirSheet(`<h3>Novidades</h3>
+    <p class="hint">O que vocês fizeram no app, do mais recente pro mais antigo.</p>
+    <div class="atvs">${l.length ? l.map(a => {
+      const eu = a.uid === meuUid();
+      const mes = a.mes ? ' · ' + MESES[+a.mes.slice(5) - 1] : '';
+      return `<div class="atv ${!eu && a.em > ultimo ? 'nova' : ''}"><b>${eu ? 'Você' : esc(a.quem)}</b> ${esc(a.texto)}<small>${quando(a.em)}${mes}</small></div>`;
+    }).join('') : '<div class="nota">Nada por aqui ainda. Quando um de vocês mexer em alguma conta, aparece aqui.</div>'}</div>`);
+  localStorage.setItem(chaveVisto(), String(Date.now()));
+  render();
+}
+
 function iniciar(){
+  assinarAtividade();
   DB.watchConfig(c => { state.config = c; render(); });
   DB.watchContas(l => { state.contas = l; state.ok.contas = true; sincronizar(); render(); });
   assinarMes();
@@ -365,6 +430,7 @@ const I = {
   dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
   ajustes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  sino: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>',
   mais: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
@@ -400,6 +466,7 @@ function render(){
   const pct = total ? Math.round(pago / total * 100) : 0;
   const semValor = itens.filter(i => i.valor == null && !i.pago).length;
   const atras = itens.filter(atrasada).length;
+  const nNovas = naoVistas().length;
 
   // celebração quando zera
   if (state.ok.itens){
@@ -443,8 +510,12 @@ function render(){
     <header>
       <div><div class="logo">nossas coisinhas<span class="hrt">♥</span></div>
       ${DEMO ? '<div class="live demo">modo demo · só neste aparelho</div>' : ''}</div>
-      <button class="icon-btn" data-acao="ajustes" aria-label="Ajustes">${I.ajustes}</button>
+      <div class="topo-btns">
+        <button class="icon-btn sino" data-acao="novidades" aria-label="Novidades">${I.sino}${nNovas ? `<span class="badge">${nNovas > 9 ? '9+' : nNovas}</span>` : ''}</button>
+        <button class="icon-btn" data-acao="ajustes" aria-label="Ajustes">${I.ajustes}</button>
+      </div>
     </header>
+    ${nNovas ? `<button class="novas" data-acao="novidades">🔔 <b>${nNovas} ${nNovas > 1 ? 'novidades' : 'novidade'}</b> desde sua última visita <span>ver</span></button>` : ''}
     <div class="mesnav">
       <h2>${nomeMes(state.ym).replace(/ (\d+)$/, ' <span>$1</span>')}</h2>
       <div class="arrows"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">${I.esq}</button><button class="icon-btn" data-mes="1" aria-label="Próximo mês">${I.dir}</button></div>
@@ -474,6 +545,7 @@ document.addEventListener('click', e => {
   const a = el.dataset.acao;
   if (a === 'novo') sheetNovo();
   if (a === 'ajustes') sheetAjustes();
+  if (a === 'novidades') sheetNovidades();
   if (a === 'importar') importarOutubro();
   if (a === 'verPagas'){ state.verPagas = !state.verPagas; localStorage.setItem('nc_verPagas', state.verPagas ? '1' : '0'); render(); }
 });
@@ -483,6 +555,7 @@ async function alternarPago(it){
   if (!it.pago && it.valor == null){ sheetItem(it, true); return; }
   const pago = !it.pago;
   await DB.set('itens', it.id, {pago, pagoEm: pago ? hojeBR() : null, pagoPor: pago ? quem() : null}, true);
+  registrar(pago ? `marcou ${it.nome} como pago` : `desmarcou ${it.nome}`);
   if (pago) toast(FRASES[Math.floor(Math.random() * FRASES.length)]);
 }
 
@@ -531,6 +604,9 @@ function sheetItem(it, focarValor){
       pagoEm: pago ? (it.pago ? it.pagoEm || hojeBR() : hojeBR()) : null,
       pagoPor: pago ? (it.pago ? it.pagoPor || quem() : quem()) : null
     }, true);
+    if (pago !== !!it.pago) registrar(pago ? `marcou ${nome} como pago` + (valor !== it.valor ? ` (R$ ${dinheiro(valor, true)})` : '') : `desmarcou ${nome}`);
+    else if (valor !== it.valor) registrar(`colocou R$ ${dinheiro(valor, true)} em ${nome}`);
+    else registrar(`editou ${nome}`);
     fecharSheet();
     if (pago && !it.pago) toast(FRASES[Math.floor(Math.random() * FRASES.length)]);
   };
@@ -539,6 +615,7 @@ function sheetItem(it, focarValor){
   c.querySelector('#b-rem').onclick = async () => {
     if (!confirm(`Remover "${it.nome}" de ${nomeMes(state.ym)}?` + (it.contaId ? '\nOs outros meses continuam normais.' : ''))) return;
     if (it.contaId) await DB.removerDoMes(state.ym, it.contaId, it.id); else await DB.del('itens', it.id);
+    registrar(`removeu ${it.nome} deste mês`);
     fecharSheet(); toast('Removida');
   };
 }
@@ -596,6 +673,7 @@ function sheetNovo(){
       if (tipo === 'variavel') item.valor = valor;
       await DB.lote([{col: 'contas', id, data: conta}, {col: 'itens', id: ym + '_' + id, data: item}]);
     }
+    registrar(`adicionou ${nome}` + (valor != null ? ` (R$ ${dinheiro(valor, true)})` : ''));
     fecharSheet(); toast('Adicionada ✓');
   };
 }
@@ -635,14 +713,14 @@ function sheetConta(ct){
         ops.push({col: 'itens', id: it.id, data: d, merge: true});
       }
     }
-    await DB.lote(ops); fecharSheet(); toast('Conta atualizada');
+    await DB.lote(ops); registrar(`editou a conta ${up.nome}`); fecharSheet(); toast('Conta atualizada');
   };
   c.querySelector('#b-fim').onclick = async () => {
     if (!confirm(`Encerrar "${ct.nome}"?\nEla deixa de aparecer a partir de ${nomeMes(ym)}. Os meses anteriores ficam como estão.`)) return;
     const itens = await DB.itensDaConta(ct.id);
     const ops = [{col: 'contas', id: ct.id, data: {fim: addMeses(ym, -1)}, merge: true}];
     itens.filter(i => i.mes >= ym && !i.pago).forEach(i => ops.push({col: 'itens', id: i.id, del: true}));
-    await DB.lote(ops); fecharSheet(); toast('Conta encerrada');
+    await DB.lote(ops); registrar(`encerrou a conta ${ct.nome}`); fecharSheet(); toast('Conta encerrada');
   };
 }
 
@@ -720,13 +798,14 @@ async function importarOutubro(){
   });
   AVULSOS.forEach(([nome, valor]) => ops.push({col: 'itens', id: DB.novoId(), data: {mes: YM, nome, dono: 'casa', tipo: 'avulso', dia: null, valor, pago: true, pagoEm: 'importado', pagoPor: null, criadoEm: agora}}));
   await DB.lote(ops);
+  registrar('importou a planilha de outubro');
   if (state.ym !== YM){ state.ym = YM; assinarMes(); }
   toast('Planilha importada ✓');
 }
 
 /* ---------- toast + confete ---------- */
 let tt;
-function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), 2200); }
+function toast(msg, ms){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), ms || 2200); }
 function confete(){
   toast('Tudo pago esse mês! 🎉');
   const em = ['🎉','✨','💸','🥂','💛','🎊'];
