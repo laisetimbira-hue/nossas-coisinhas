@@ -204,6 +204,7 @@ const FIREBASE_CONFIG = {
 /* ==================================================================== */
 
 const DEMO = !FIREBASE_CONFIG.apiKey;
+const DOMINIO_LOGIN = '@nossascoisinhas.com'; // no login basta digitar o nome; o app completa o resto
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -741,14 +742,16 @@ function telaLogin(){
   $('#app').innerHTML = `<div class="login wrap">
     <div class="logo">nossas coisinhas<span class="hrt">♥</span></div>
     <p>as contas da casa, organizadas a dois.</p>
-    <label>E-mail<input type="email" id="l-email" autocomplete="username"></label>
+    <label>Nome<input type="text" id="l-email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="ex.: timbira"></label>
     <label>Senha<input type="password" id="l-senha" autocomplete="current-password"></label>
     <button class="btn pri" id="l-ok">Entrar</button>
     <div class="err" id="l-err"></div></div>`;
   const go = async () => {
     $('#l-err').textContent = '';
-    try { await firebase.auth().signInWithEmailAndPassword($('#l-email').value.trim(), $('#l-senha').value); }
-    catch(e){ $('#l-err').textContent = ({'auth/wrong-password': 'Senha incorreta', 'auth/user-not-found': 'Usuário não encontrado', 'auth/invalid-email': 'E-mail inválido', 'auth/invalid-credential': 'E-mail ou senha incorretos', 'auth/too-many-requests': 'Muitas tentativas, espera um pouco'})[e.code] || e.message; }
+    let login = $('#l-email').value.trim().toLowerCase();
+    if (login && !login.includes('@')) login += DOMINIO_LOGIN;
+    try { await firebase.auth().signInWithEmailAndPassword(login, $('#l-senha').value); }
+    catch(e){ $('#l-err').textContent = ({'auth/wrong-password': 'Senha incorreta', 'auth/user-not-found': 'Usuário não encontrado', 'auth/invalid-email': 'Nome inválido', 'auth/invalid-credential': 'Nome ou senha incorretos', 'auth/too-many-requests': 'Muitas tentativas, espera um pouco'})[e.code] || e.message; }
   };
   $('#l-ok').onclick = go;
   $('#l-senha').onkeydown = e => { if (e.key === 'Enter') go(); };
