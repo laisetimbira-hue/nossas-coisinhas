@@ -442,7 +442,7 @@ function render(){
   app.innerHTML = `<div class="wrap">
     <header>
       <div><div class="logo">nossas coisinhas<span class="hrt">♥</span></div>
-      <div class="live ${DEMO ? 'demo' : ''}">${DEMO ? 'modo demo · só neste aparelho' : 'ao vivo · sincronizado'}</div></div>
+      ${DEMO ? '<div class="live demo">modo demo · só neste aparelho</div>' : ''}</div>
       <button class="icon-btn" data-acao="ajustes" aria-label="Ajustes">${I.ajustes}</button>
     </header>
     <div class="mesnav">
