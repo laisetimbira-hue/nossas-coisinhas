@@ -178,6 +178,34 @@ input:focus{border-color:var(--ink)}
 #toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:14px;font-weight:700;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;width:max-content;max-width:calc(100vw - 32px);text-align:center}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 
+/* abas */
+.abas{display:flex;background:var(--soft);border-radius:14px;padding:4px;margin:12px 0 0}
+.abas button{flex:1;border:0;background:transparent;padding:9px;border-radius:11px;font-weight:700;font-size:14px;color:var(--muted)}
+.abas button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+.abas em{font-style:normal;background:var(--accent);color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;margin-left:6px}
+
+/* olho */
+.resumo .topo{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:2}
+.olho{border:0;background:color-mix(in srgb,var(--bg) 14%,transparent);color:var(--bg);width:34px;height:30px;border-radius:10px;display:grid;place-items:center;margin-right:58px}
+.olho svg{width:18px;height:18px}
+
+/* mercado */
+.add-merc{display:flex;gap:8px;margin:16px 0 4px}
+.add-merc input{margin-top:0!important;flex:1}
+.add-merc button{flex:none;width:50px;border:0;border-radius:14px;background:var(--accent);color:#fff;display:grid;place-items:center}
+.add-merc button svg{width:22px;height:22px}
+.dica{font-size:12px;color:var(--muted);margin:2px 2px 0}
+.mi{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:11px 8px 11px 12px;box-shadow:var(--shadow);cursor:pointer;transition:opacity .2s,transform .15s}
+.mi:active{transform:scale(.985)}
+.mi .x{flex:1;min-width:0}
+.mi .x b{display:block;font-size:15.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mi .x small{font-size:11.5px;color:var(--muted)}
+.mi .del{border:0;background:none;color:var(--muted);font-size:20px;line-height:1;width:32px;height:32px;border-radius:10px;flex:none}
+.mi.ok{opacity:.55}
+.mi.ok .x b{text-decoration:line-through;text-decoration-color:var(--muted)}
+.mi.ok .check{background:var(--ok);border-color:var(--ok);color:#fff}
+.mi.ok .check svg{opacity:1;transform:scale(1)}
+
 /* novidades */
 .topo-btns{display:flex;gap:8px}
 .sino{position:relative}
@@ -253,7 +281,7 @@ function LocalDB(){
   const KEY = 'nossas_coisinhas_demo';
   let d; try { d = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
   d = d || {};
-  ['contas','itens','meses','config','atividade'].forEach(k => d[k] = d[k] || {});
+  ['contas','itens','meses','config','atividade','mercado'].forEach(k => d[k] = d[k] || {});
   const subs = new Set(); let t = null;
   const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch(e) {} clearTimeout(t); t = setTimeout(() => subs.forEach(f => f()), 0); };
   const sub = f => { subs.add(f); setTimeout(f, 0); return () => subs.delete(f); };
@@ -266,6 +294,7 @@ function LocalDB(){
     watchMes: (ym, cb) => sub(() => cb(d.meses[ym] || {})),
     watchConfig: cb => sub(() => cb(d.config.geral || {})),
     watchAtividade: cb => sub(() => cb(lista('atividade').sort((a, b) => b.em - a.em).slice(0, 60))),
+    watchMercado: cb => sub(() => cb(lista('mercado'))),
     async add(col, data){ d[col][Math.random().toString(36).slice(2, 12)] = cl(data); salvar(); },
     novoId: () => Math.random().toString(36).slice(2, 12),
     async set(col, id, data, merge){ escrever(col, id, data, merge); salvar(); },
@@ -292,6 +321,7 @@ function FireDB(){
     watchMes: (ym, cb) => db.collection('meses').doc(ym).onSnapshot(s => cb(s.exists ? s.data() : {}), erro),
     watchConfig: cb => db.collection('config').doc('geral').onSnapshot(s => cb(s.exists ? s.data() : {}), erro),
     watchAtividade: cb => db.collection('atividade').orderBy('em', 'desc').limit(60).onSnapshot(s => cb(map(s)), erro),
+    watchMercado: cb => db.collection('mercado').onSnapshot(s => cb(map(s)), erro),
     add: (col, data) => db.collection(col).add(data),
     novoId: () => db.collection('_').doc().id,
     set: (col, id, data, merge) => db.collection(col).doc(id).set(data, {merge: !!merge}),
@@ -320,8 +350,13 @@ let DB, user = null;
 const state = {
   ym: HOJE_YM, contas: [], itens: [], mes: {}, config: {},
   ok: {contas: false, itens: false, mes: false},
-  filtro: 'tudo', verPagas: localStorage.getItem('nc_verPagas') !== '0'
+  filtro: 'tudo', verPagas: localStorage.getItem('nc_verPagas') !== '0',
+  aba: localStorage.getItem('nc_aba') === 'mercado' ? 'mercado' : 'contas',
+  oculto: localStorage.getItem('nc_oculto') === '1',
+  mercado: [], atividade: []
 };
+const mostra = (v, sc) => state.oculto ? '•••' : dinheiro(v, sc);
+const semValores = t => state.oculto ? String(t).replace(/R\$ ?[\d.,]+/g, 'R$ •••') : t;
 let unsubMes = [], criando = new Set(), pendAnterior = null;
 
 const nomeDono = k => k === 'casa' ? 'Casa' : k === 'a' ? (state.config.nomeA || 'EMS') : (state.config.nomeB || 'LÁ');
@@ -396,7 +431,7 @@ function assinarAtividade(){
   DB.watchAtividade(l => {
     if (idsAtiv){
       const deles = l.filter(a => !idsAtiv.has(a.id) && a.uid !== meuUid());
-      if (deles.length === 1) toast(`${deles[0].quem} ${deles[0].texto}`, 3800);
+      if (deles.length === 1) toast(`${deles[0].quem} ${semValores(deles[0].texto)}`, 3800);
       else if (deles.length > 1) toast(`${deles[0].quem} fez ${deles.length} alterações`, 3800);
     }
     idsAtiv = new Set(l.map(a => a.id));
@@ -411,7 +446,7 @@ function sheetNovidades(){
     <div class="atvs">${l.length ? l.map(a => {
       const eu = a.uid === meuUid();
       const mes = a.mes ? ' · ' + MESES[+a.mes.slice(5) - 1] : '';
-      return `<div class="atv ${!eu && a.em > ultimo ? 'nova' : ''}"><b>${eu ? 'Você' : esc(a.quem)}</b> ${esc(a.texto)}<small>${quando(a.em)}${mes}</small></div>`;
+      return `<div class="atv ${!eu && a.em > ultimo ? 'nova' : ''}"><b>${eu ? 'Você' : esc(a.quem)}</b> ${esc(semValores(a.texto))}<small>${quando(a.em)}${mes}</small></div>`;
     }).join('') : '<div class="nota">Nada por aqui ainda. Quando um de vocês mexer em alguma conta, aparece aqui.</div>'}</div>`);
   localStorage.setItem(chaveVisto(), String(Date.now()));
   render();
@@ -419,6 +454,7 @@ function sheetNovidades(){
 
 function iniciar(){
   assinarAtividade();
+  DB.watchMercado(l => { state.mercado = l; render(); });
   DB.watchConfig(c => { state.config = c; render(); });
   DB.watchContas(l => { state.contas = l; state.ok.contas = true; sincronizar(); render(); });
   assinarMes();
@@ -431,6 +467,8 @@ const I = {
   ajustes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   sino: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>',
+  olho: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  olhoFechado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.6A10.6 10.6 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a17 17 0 0 1-3.2 4M6.6 6.6C3.7 8.4 2 12 2 12s3.6 6.5 10 6.5c1.7 0 3.2-.4 4.5-1.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
   mais: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
 };
 
@@ -452,7 +490,7 @@ function cardItem(it){
   if (it.pago && it.pagoPor) sub.push('pago por ' + esc(it.pagoPor));
   return `<div class="item ${it.pago ? 'pago' : ''} ${atrasada(it) ? 'late' : ''}" data-id="${it.id}" style="--c:${corDono(it.dono)}">
     <div class="info"><div class="nome">${esc(it.nome)}</div><div class="sub">${sub.join('<span>·</span>')}</div></div>
-    <div class="val">${it.valor == null ? '<span class="semvalor">+ valor</span>' : dinheiro(it.valor, true)}</div>
+    <div class="val">${it.valor == null ? '<span class="semvalor">+ valor</span>' : mostra(it.valor, true)}</div>
     <button class="check" data-check aria-label="Marcar como pago">${I.check}</button>
   </div>`;
 }
@@ -478,8 +516,8 @@ function render(){
   const donos = ['casa','a','b'].map(k => {
     const d = porDono(k);
     return `<button class="dono ${state.filtro === k ? 'on' : ''}" data-filtro="${k}" style="--c:${corDono(k)}">
-      <div class="n">${esc(nomeDono(k))}</div><div class="t">${dinheiro(d.t, true)}</div>
-      <div class="f ${d.f <= 0 && d.t > 0 ? 'zero' : ''}">${d.t === 0 ? '—' : d.f <= 0 ? 'tudo pago ✓' : 'falta ' + dinheiro(d.f, true)}</div></button>`;
+      <div class="n">${esc(nomeDono(k))}</div><div class="t">${mostra(d.t, true)}</div>
+      <div class="f ${d.f <= 0 && d.t > 0 ? 'zero' : ''}">${d.t === 0 ? '—' : d.f <= 0 ? 'tudo pago ✓' : 'falta ' + mostra(d.f, true)}</div></button>`;
   }).join('');
 
   const visiveis = itens.filter(i => state.filtro === 'tudo' || i.dono === state.filtro);
@@ -506,6 +544,12 @@ function render(){
       ${state.verPagas ? `<div class="lista">${pagas.map(cardItem).join('')}</div>` : ''}` : ''}`;
   }
 
+  const pendMerc = state.mercado.filter(m => !m.feito).length;
+  const merc = state.aba === 'mercado';
+  // guarda o que está sendo digitado na lista de mercado (a tela redesenha a cada mudança)
+  const inpAntes = $('#m-novo');
+  const salvoInp = inpAntes ? {v: inpAntes.value, foco: document.activeElement === inpAntes} : null;
+
   app.innerHTML = `<div class="wrap">
     <header>
       <div><div class="logo">nossas coisinhas<span class="hrt">♥</span></div>
@@ -516,28 +560,90 @@ function render(){
       </div>
     </header>
     ${nNovas ? `<button class="novas" data-acao="novidades">🔔 <b>${nNovas} ${nNovas > 1 ? 'novidades' : 'novidade'}</b> desde sua última visita <span>ver</span></button>` : ''}
+    <div class="abas">
+      <button class="${merc ? '' : 'on'}" data-aba="contas">Contas</button>
+      <button class="${merc ? 'on' : ''}" data-aba="mercado">Mercado${pendMerc ? `<em>${pendMerc}</em>` : ''}</button>
+    </div>
+    ${merc ? telaMercado() : `
     <div class="mesnav">
       <h2>${nomeMes(state.ym).replace(/ (\d+)$/, ' <span>$1</span>')}</h2>
       <div class="arrows"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">${I.esq}</button><button class="icon-btn" data-mes="1" aria-label="Próximo mês">${I.dir}</button></div>
     </div>
     <section class="resumo">
-      <div class="lbl">Total do mês</div>
-      <div class="big"><small>R$</small>${dinheiro(total, true)}</div>
+      <div class="topo"><div class="lbl">Total do mês</div>
+        <button class="olho" data-acao="olho" aria-label="${state.oculto ? 'Mostrar valores' : 'Esconder valores'}">${state.oculto ? I.olhoFechado : I.olho}</button></div>
+      <div class="big"><small>R$</small>${mostra(total, true)}</div>
       <div class="bar"><i style="width:${pct}%"></i></div>
-      <div class="row"><span>Pago · ${pct}%<b>R$ ${dinheiro(pago, true)}</b></span><span class="falta" style="text-align:right">Falta<b>R$ ${dinheiro(falta, true)}</b></span></div>
+      <div class="row"><span>Pago · ${pct}%<b>R$ ${mostra(pago, true)}</b></span><span class="falta" style="text-align:right">Falta<b>R$ ${mostra(falta, true)}</b></span></div>
       ${avisos.length ? `<div class="aviso">${avisos.join(' &nbsp; ')}</div>` : ''}
     </section>
     <div class="donos">${donos}</div>
-    ${corpo}
+    ${corpo}`}
   </div>
-  <button class="fab" data-acao="novo" aria-label="Adicionar">${I.mais}</button>`;
+  ${merc ? '' : `<button class="fab" data-acao="novo" aria-label="Adicionar">${I.mais}</button>`}`;
+
+  const inp = $('#m-novo');
+  if (inp && salvoInp){ inp.value = salvoInp.v; if (salvoInp.foco){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); } }
+}
+
+/* ---------- lista de mercado ---------- */
+function telaMercado(){
+  const l = state.mercado;
+  const falta = l.filter(m => !m.feito).sort((a, b) => a.criadoEm - b.criadoEm);
+  const carrinho = l.filter(m => m.feito).sort((a, b) => (b.feitoEm || 0) - (a.feitoEm || 0));
+  const quemTxt = n => n && n !== meuNome() ? esc(n) : 'você';
+  const linha = m => `<div class="mi ${m.feito ? 'ok' : ''}" data-merc="${m.id}">
+      <button class="check" aria-label="Pegar">${I.check}</button>
+      <div class="x"><b>${esc(m.nome)}</b><small>${m.feito ? 'pego por ' + quemTxt(m.feitoPor) : 'por ' + quemTxt(m.quem)}</small></div>
+      <button class="del" data-mdel="${m.id}" aria-label="Tirar da lista">×</button></div>`;
+  return `
+    <div class="add-merc">
+      <input id="m-novo" placeholder="O que precisa comprar?" enterkeyhint="done" autocomplete="off">
+      <button data-acao="addMerc" aria-label="Adicionar">${I.mais}</button>
+    </div>
+    <div class="dica">Dica: dá pra colocar vários de uma vez, separados por vírgula.</div>
+    ${!l.length ? `<div class="vazio"><h4>Lista vazia 🛒</h4><p>Escreve aí em cima o que está faltando em casa. O que um coloca, o outro vê na hora.</p></div>` : `
+    <div class="sec"><h3>Comprar<em>${falta.length}</em></h3></div>
+    <div class="lista">${falta.length ? falta.map(linha).join('') : '<div class="tudo-pago"><b>tudo no carrinho!</b>pode ir pro caixa ✨</div>'}</div>
+    ${carrinho.length ? `<div class="sec"><h3>No carrinho<em>${carrinho.length}</em></h3><button data-acao="limparMerc">limpar comprados</button></div>
+    <div class="lista">${carrinho.map(linha).join('')}</div>` : ''}`}`;
+}
+async function addMercado(){
+  const inp = $('#m-novo'); if (!inp) return;
+  const nomes = inp.value.split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+  if (!nomes.length) return;
+  inp.value = ''; inp.focus();
+  const ops = [], novos = [], agora = Date.now();
+  nomes.forEach((n, i) => {
+    const igual = state.mercado.find(m => m.nome.toLowerCase() === n.toLowerCase());
+    if (igual && !igual.feito) return;                       // já está na lista
+    if (igual){ ops.push({col: 'mercado', id: igual.id, data: {feito: false, criadoEm: agora + i, quem: meuNome(), uid: meuUid()}, merge: true}); novos.push(n); return; }
+    ops.push({col: 'mercado', id: DB.novoId(), data: {nome: n.charAt(0).toUpperCase() + n.slice(1), feito: false, quem: meuNome(), uid: meuUid(), criadoEm: agora + i}});
+    novos.push(n);
+  });
+  if (!ops.length) return toast('Já está na lista');
+  await DB.lote(ops);
+  registrar(novos.length === 1 ? `colocou ${novos[0]} na lista do mercado` : `colocou ${novos.length} itens na lista do mercado`);
+}
+async function limparMercado(){
+  const feitos = state.mercado.filter(m => m.feito);
+  if (!feitos.length) return;
+  if (!confirm(`Tirar ${feitos.length} ${feitos.length > 1 ? 'itens comprados' : 'item comprado'} da lista?`)) return;
+  await DB.lote(feitos.map(m => ({col: 'mercado', id: m.id, del: true})));
+  toast('Lista limpa ✓');
 }
 
 /* ---------- eventos ---------- */
 document.addEventListener('click', e => {
   if (!DB || e.target.closest('#sheet')) return;
-  const el = e.target.closest('[data-acao],[data-mes],[data-filtro],[data-check],.item');
+  const el = e.target.closest('[data-acao],[data-mes],[data-filtro],[data-check],[data-aba],[data-mdel],[data-merc],.item');
   if (!el) return;
+  if (el.dataset.aba){ state.aba = el.dataset.aba; localStorage.setItem('nc_aba', state.aba); render(); window.scrollTo({top: 0}); return; }
+  if (el.dataset.mdel){ DB.del('mercado', el.dataset.mdel); return; }
+  if (el.dataset.merc){
+    const m = state.mercado.find(x => x.id === el.dataset.merc); if (!m) return;
+    DB.set('mercado', m.id, {feito: !m.feito, feitoEm: Date.now(), feitoPor: meuNome()}, true); return;
+  }
   if (el.dataset.mes){ state.ym = addMeses(state.ym, +el.dataset.mes); state.filtro = 'tudo'; assinarMes(); window.scrollTo({top: 0}); return; }
   if (el.dataset.filtro){ state.filtro = state.filtro === el.dataset.filtro ? 'tudo' : el.dataset.filtro; render(); return; }
   if (el.hasAttribute('data-check')){ const it = state.itens.find(i => i.id === el.closest('.item').dataset.id); if (it) alternarPago(it); return; }
@@ -546,8 +652,15 @@ document.addEventListener('click', e => {
   if (a === 'novo') sheetNovo();
   if (a === 'ajustes') sheetAjustes();
   if (a === 'novidades') sheetNovidades();
+  if (a === 'addMerc') addMercado();
+  if (a === 'limparMerc') limparMercado();
+  if (a === 'olho'){ state.oculto = !state.oculto; localStorage.setItem('nc_oculto', state.oculto ? '1' : '0'); render(); }
   if (a === 'importar') importarOutubro();
   if (a === 'verPagas'){ state.verPagas = !state.verPagas; localStorage.setItem('nc_verPagas', state.verPagas ? '1' : '0'); render(); }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'm-novo'){ e.preventDefault(); addMercado(); }
 });
 
 const FRASES = ['Menos uma! ✨','Riscado da lista ✓','Pago. Respira. 😮‍💨','Boa, time! 💪','Uma a menos pra pensar','Feito ✓'];
@@ -737,7 +850,7 @@ function sheetAjustes(){
     ${!DEMO ? `<label>Seu nome (aparece em "pago por")<input id="n-eu" value="${esc(user.displayName || '')}" placeholder="${esc((user.email || '').split('@')[0])}"></label>` : ''}
     <button class="btn ghost" id="b-nomes">Salvar nomes</button>
     <div class="flabel" style="margin-top:22px">Contas que se repetem · ${ativas.length}</div>
-    <div class="rows">${ativas.map(ct => `<button class="r" data-c="${ct.id}" style="--c:${corDono(ct.dono)}"><span class="d"></span><span class="x"><b>${esc(ct.nome)}</b><span>${esc(nomeDono(ct.dono))} · ${desc(ct)}</span></span><span class="v">${ct.tipo === 'variavel' ? 'varia' : dinheiro(ct.valor, true)}</span></button>`).join('') || '<div class="nota">Nenhuma ainda.</div>'}</div>
+    <div class="rows">${ativas.map(ct => `<button class="r" data-c="${ct.id}" style="--c:${corDono(ct.dono)}"><span class="d"></span><span class="x"><b>${esc(ct.nome)}</b><span>${esc(nomeDono(ct.dono))} · ${desc(ct)}</span></span><span class="v">${ct.tipo === 'variavel' ? 'varia' : mostra(ct.valor, true)}</span></button>`).join('') || '<div class="nota">Nenhuma ainda.</div>'}</div>
     ${!state.contas.length ? '<button class="btn acc" id="b-imp">Importar planilha de outubro/26</button>' : ''}
     ${DEMO ? `<div class="nota">Modo demo: os dados ficam só neste aparelho. Configure o Firebase no arquivo pra usar os dois juntos.</div><button class="btn danger" id="b-limpar">Apagar dados do demo</button>`
            : `<div class="nota">Conectado como ${esc(user.email)}</div><button class="btn danger" id="b-sair">Sair</button>`}`);
