@@ -183,7 +183,40 @@ input:focus{border-color:var(--ink)}
 
 /* abas */
 .abas{display:flex;background:var(--soft);border-radius:14px;padding:4px;margin:12px 0 0}
-.abas button{flex:1;border:0;background:transparent;padding:9px;border-radius:11px;font-weight:700;font-size:14px;color:var(--muted)}
+.abas button{flex:1;min-width:0;border:0;background:transparent;padding:9px 2px;border-radius:11px;font-weight:700;font-size:13px;color:var(--muted);white-space:nowrap}
+
+/* cofrinhos */
+.cof-topo{display:flex;justify-content:space-between;align-items:baseline;margin:16px 2px 4px;font-size:13px;color:var(--muted)}
+.cof-topo b{font-family:'JetBrains Mono',monospace;color:var(--ink);font-size:15px}
+.cof{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:var(--shadow);cursor:pointer;margin-top:10px;transition:transform .15s}
+.cof:active{transform:scale(.985)}
+.cof .cab{display:flex;align-items:center;gap:12px}
+.cof .emo{width:46px;height:46px;border-radius:15px;background:var(--soft);display:grid;place-items:center;font-size:24px;flex:none}
+.cof .nm{flex:1;min-width:0}
+.cof .nm b{display:block;font-family:'Fraunces',serif;font-size:19px;font-weight:700;letter-spacing:-.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cof .nm small{color:var(--muted);font-size:12.5px}
+.cof .pct{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px}
+.cof .barra{height:12px;border-radius:99px;background:var(--soft);overflow:hidden;margin:14px 0 8px}
+.cof .barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--c-casa),var(--accent));transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.cof.ok .barra i{background:var(--ok)}
+.cof .vals{display:flex;justify-content:space-between;font-size:13px}
+.cof .vals b{font-family:'JetBrains Mono',monospace}
+.cof .quem{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.cof .quem span{background:var(--soft);border-radius:8px;padding:3px 8px;font-size:12px}
+.cof .dica-mes{margin-top:10px;font-size:12.5px;color:var(--muted)}
+.cof .dica-mes b{color:var(--ink)}
+.cof .guardar{margin-top:12px;padding:12px}
+.emojis{display:flex;flex-wrap:wrap;gap:6px}
+.emojis button{width:44px;height:44px;border-radius:13px;border:1.5px solid var(--line);background:var(--card);font-size:21px}
+.emojis button.on{border-color:var(--ink);background:var(--soft)}
+input[type=month]{display:block;width:100%;margin-top:6px;font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:11px 13px;outline:none;min-height:48px;-webkit-appearance:none}
+.dep{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.dep:last-child{border-bottom:0}
+.dep .x{flex:1}
+.dep .x small{display:block;color:var(--muted);font-size:12px}
+.dep .v{font-family:'JetBrains Mono',monospace;font-weight:700}
+.dep .v.neg{color:var(--late)}
+.dep .del{border:0;background:none;color:var(--muted);font-size:19px;width:30px;height:30px}
 .abas button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 .abas em{font-style:normal;background:var(--accent);color:#fff;border-radius:99px;padding:1px 7px;font-size:11px;margin-left:6px}
 
@@ -310,7 +343,7 @@ function LocalDB(){
   const KEY = 'nossas_coisinhas_demo';
   let d; try { d = JSON.parse(localStorage.getItem(KEY)); } catch(e) {}
   d = d || {};
-  ['contas','itens','meses','config','atividade','mercado','desejos'].forEach(k => d[k] = d[k] || {});
+  ['contas','itens','meses','config','atividade','mercado','desejos','cofrinhos','depositos'].forEach(k => d[k] = d[k] || {});
   const subs = new Set(); let t = null;
   const salvar = () => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch(e) {} clearTimeout(t); t = setTimeout(() => subs.forEach(f => f()), 0); };
   const sub = f => { subs.add(f); setTimeout(f, 0); return () => subs.delete(f); };
@@ -325,6 +358,8 @@ function LocalDB(){
     watchAtividade: cb => sub(() => cb(lista('atividade').sort((a, b) => b.em - a.em).slice(0, 60))),
     watchMercado: cb => sub(() => cb(lista('mercado'))),
     watchDesejos: cb => sub(() => cb(lista('desejos'))),
+    watchCofrinhos: cb => sub(() => cb(lista('cofrinhos'))),
+    watchDepositos: cb => sub(() => cb(lista('depositos'))),
     async add(col, data){ const id = Math.random().toString(36).slice(2, 12); d[col][id] = cl(data); salvar(); return id; },
     async restaurarNoMes(ym, contaId, itemId, data){
       const m = d.meses[ym] || {}; m.removidos = (m.removidos || []).filter(x => x !== contaId); d.meses[ym] = m;
@@ -360,6 +395,8 @@ function FireDB(){
     watchAtividade: cb => db.collection('atividade').orderBy('em', 'desc').limit(60).onSnapshot(s => cb(map(s)), erro),
     watchMercado: cb => db.collection('mercado').onSnapshot(s => cb(map(s)), erro),
     watchDesejos: cb => db.collection('desejos').onSnapshot(s => cb(map(s)), erro),
+    watchCofrinhos: cb => db.collection('cofrinhos').onSnapshot(s => cb(map(s)), erro),
+    watchDepositos: cb => db.collection('depositos').onSnapshot(s => cb(map(s)), erro),
     add: (col, data) => db.collection(col).add(data).then(r => r.id),
     restaurarNoMes: (ym, contaId, itemId, data) => {
       const b = db.batch();
@@ -400,7 +437,8 @@ const state = {
   ym: HOJE_YM, contas: [], itens: [], mes: {}, config: {},
   ok: {contas: false, itens: false, mes: false},
   filtro: 'tudo', verPagas: localStorage.getItem('nc_verPagas') !== '0',
-  aba: ['mercado', 'desejos'].includes(localStorage.getItem('nc_aba')) ? localStorage.getItem('nc_aba') : 'contas',
+  aba: ['mercado', 'desejos', 'cofrinhos'].includes(localStorage.getItem('nc_aba')) ? localStorage.getItem('nc_aba') : 'contas',
+  cofrinhos: [], depositos: [],
   desejos: [],
   oculto: localStorage.getItem('nc_oculto') === '1',
   mercado: [], atividade: []
@@ -583,6 +621,8 @@ function iniciar(){
   assinarAtividade();
   DB.watchMercado(l => { state.mercado = l; render(); });
   DB.watchDesejos(l => { state.desejos = l; render(); });
+  DB.watchCofrinhos(l => { state.cofrinhos = l; render(); });
+  DB.watchDepositos(l => { state.depositos = l; render(); });
   DB.watchConfig(c => { state.config = c; render(); });
   DB.watchContas(l => { state.contas = l; state.ok.contas = true; sincronizar(); render(); });
   assinarMes();
@@ -673,7 +713,7 @@ function render(){
   }
 
   const pendMerc = state.mercado.filter(m => !m.feito).length;
-  const aba = state.aba, merc = aba === 'mercado', des = aba === 'desejos';
+  const aba = state.aba, merc = aba === 'mercado', des = aba === 'desejos', cof = aba === 'cofrinhos';
   // guarda o que está sendo digitado nas listas (a tela redesenha a cada mudança)
   const CAMPOS = ['m-novo', 'd-novo', 'd-preco'];
   const salvos = CAMPOS.map(id => { const el = $('#' + id); return el ? {id, v: el.value, foco: document.activeElement === el} : null; }).filter(Boolean);
@@ -692,8 +732,9 @@ function render(){
       <button class="${aba === 'contas' ? 'on' : ''}" data-aba="contas">Contas</button>
       <button class="${merc ? 'on' : ''}" data-aba="mercado">Mercado${pendMerc ? `<em>${pendMerc}</em>` : ''}</button>
       <button class="${des ? 'on' : ''}" data-aba="desejos">Desejos</button>
+      <button class="${cof ? 'on' : ''}" data-aba="cofrinhos">Cofrinhos</button>
     </div>
-    ${merc ? telaMercado() : des ? telaDesejos() : `
+    ${merc ? telaMercado() : des ? telaDesejos() : cof ? telaCofrinhos() : `
     <div class="mesnav">
       <h2>${nomeMes(state.ym).replace(/ (\d+)$/, ' <span>$1</span>')}</h2>
       <div class="arrows"><button class="icon-btn" data-mes="-1" aria-label="Mês anterior">${I.esq}</button><button class="icon-btn" data-mes="1" aria-label="Próximo mês">${I.dir}</button></div>
@@ -709,13 +750,150 @@ function render(){
     <div class="donos">${donos}</div>
     ${corpo}`}
   </div>
-  ${merc || des ? '' : `<button class="fab" data-acao="novo" aria-label="Adicionar">${I.mais}</button>`}`;
+  ${merc || des ? '' : `<button class="fab" data-acao="${cof ? 'novoCofrinho' : 'novo'}" aria-label="Adicionar">${I.mais}</button>`}`;
 
   salvos.forEach(s => {
     const el = $('#' + s.id); if (!el) return;
     el.value = s.v;
     if (s.foco){ el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch(e) {} }
   });
+}
+
+/* ---------- cofrinhos do casal ---------- */
+const EMOJIS_COF = ['💰','✈️','💍','🏠','🚗','🛟','🎁','🐶','🎓','🏖️'];
+function infoCofrinho(c){
+  const deps = state.depositos.filter(d => d.cofrinhoId === c.id);
+  const guardado = Math.round(deps.reduce((s, d) => s + (Number(d.valor) || 0), 0) * 100) / 100;
+  const meta = Number(c.meta) || 0;
+  const falta = Math.max(0, meta - guardado);
+  const pct = meta ? Math.min(100, Math.round(guardado / meta * 100)) : 0;
+  const porPessoa = {};
+  deps.forEach(d => { const k = d.uid || d.quem; porPessoa[k] = porPessoa[k] || {nome: d.quem, uid: d.uid, v: 0}; porPessoa[k].v += Number(d.valor) || 0; porPessoa[k].nome = d.quem; });
+  let porMes = null, mesesRest = null;
+  if (c.prazo && falta > 0){
+    mesesRest = difMeses(HOJE_YM, c.prazo) + 1;   // conta o mês atual
+    porMes = mesesRest > 0 ? Math.ceil(falta / mesesRest) : null;
+  }
+  return {deps, guardado, meta, falta, pct, porPessoa: Object.values(porPessoa).filter(p => Math.abs(p.v) > 0.004), porMes, mesesRest, ok: meta > 0 && guardado >= meta};
+}
+function telaCofrinhos(){
+  const l = state.cofrinhos.slice().sort((a, b) => a.criadoEm - b.criadoEm);
+  const totalGuardado = l.reduce((s, c) => s + infoCofrinho(c).guardado, 0);
+  const nomeP = p => p.uid === meuUid() ? 'você' : esc(p.nome);
+  const card = c => {
+    const i = infoCofrinho(c);
+    const prazoTxt = c.prazo ? 'até ' + nomeMes(c.prazo) : 'sem prazo';
+    let dica = '';
+    if (i.ok) dica = '<div class="dica-mes">🎉 <b>Meta batida!</b> Parabéns, vocês dois.</div>';
+    else if (i.porMes) dica = `<div class="dica-mes">Guardando <b>R$ ${mostra(i.porMes, true)}/mês</b> vocês chegam ${i.mesesRest === 1 ? 'neste mês' : 'em ' + nomeMes(c.prazo)}.</div>`;
+    else if (c.prazo && i.mesesRest !== null && i.mesesRest <= 0) dica = '<div class="dica-mes">O prazo passou — dá pra mudar a data em editar.</div>';
+    return `<div class="cof ${i.ok ? 'ok' : ''}" data-cof="${c.id}">
+      <div class="cab"><div class="emo">${esc(c.emoji || '💰')}</div>
+        <div class="nm"><b>${esc(c.nome)}</b><small>meta R$ ${mostra(i.meta, true)} · ${prazoTxt}</small></div>
+        <div class="pct">${i.pct}%</div></div>
+      <div class="barra"><i style="width:${i.pct}%"></i></div>
+      <div class="vals"><span>Guardado <b>R$ ${mostra(i.guardado, true)}</b></span><span>${i.ok ? 'completo ✓' : `faltam <b>R$ ${mostra(i.falta, true)}</b>`}</span></div>
+      ${i.porPessoa.length ? `<div class="quem">${i.porPessoa.map(p => `<span>${nomeP(p)} R$ ${mostra(p.v, true)}</span>`).join('')}</div>` : ''}
+      ${dica}
+      <button class="btn acc guardar" data-guardar="${c.id}">+ Guardei</button>
+    </div>`;
+  };
+  if (!l.length) return `<div class="vazio"><h4>Nenhum cofrinho ainda 🐷</h4>
+    <p>Crie uma meta pra vocês dois — viagem, casamento, reserva — e vejam a barrinha encher.</p>
+    <button class="btn acc" data-acao="novoCofrinho">+ Criar cofrinho</button></div>`;
+  return `<div class="cof-topo"><span>${l.length} ${l.length > 1 ? 'cofrinhos' : 'cofrinho'}</span><span>guardado em tudo <b>R$ ${mostra(totalGuardado, true)}</b></span></div>
+    ${l.map(card).join('')}`;
+}
+function sheetCofrinho(c){
+  const novo = !c;
+  c = c || {emoji: '💰'};
+  const card = abrirSheet(`
+    <h3>${novo ? 'Novo cofrinho' : 'Editar cofrinho'}</h3>
+    <div class="flabel">Ícone</div>
+    <div class="emojis">${EMOJIS_COF.map(e => `<button type="button" data-emo="${e}" class="${(c.emoji || '💰') === e ? 'on' : ''}">${e}</button>`).join('')}</div>
+    <label>Nome<input id="c-nome" value="${esc(c.nome || '')}" placeholder="Ex.: Lua de mel, Reserva, Carro novo"></label>
+    <div class="two">
+      <label>Meta (R$)<input id="c-meta" inputmode="decimal" placeholder="10.000" value="${c.meta ? dinheiro(c.meta, true) : ''}"></label>
+      <label>Até quando<input id="c-prazo" type="month" value="${c.prazo || ''}"></label>
+    </div>
+    <p class="hint" style="margin-top:8px">A data é opcional. Com ela, o app calcula quanto guardar por mês.</p>
+    <button class="btn pri" id="c-ok">${novo ? 'Criar cofrinho' : 'Salvar'}</button>
+    ${novo ? '' : '<button class="btn danger" id="c-del">Excluir cofrinho</button>'}`);
+  let emoji = c.emoji || '💰';
+  card.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => {
+    emoji = b.dataset.emo; card.querySelectorAll('[data-emo]').forEach(x => x.classList.toggle('on', x === b));
+  });
+  if (novo) setTimeout(() => card.querySelector('#c-nome').focus(), 300);
+  card.querySelector('#c-ok').onclick = async () => {
+    const nome = val(card, 'c-nome').trim(), meta = lerValor(val(card, 'c-meta')), prazo = val(card, 'c-prazo') || null;
+    if (!nome) return toast('Dá um nome pro cofrinho');
+    if (!meta || meta <= 0) return toast('Coloca o valor da meta');
+    if (novo){
+      await DB.set('cofrinhos', DB.novoId(), {nome, emoji, meta, prazo, criadoEm: Date.now(), quem: meuNome(), uid: meuUid()});
+      registrar(`criou o cofrinho ${emoji} ${nome} (meta R$ ${dinheiro(meta, true)})`);
+      toast('Cofrinho criado 🐷');
+    } else {
+      await DB.set('cofrinhos', c.id, {nome, emoji, meta, prazo}, true);
+      toast('Cofrinho atualizado');
+    }
+    fecharSheet();
+  };
+  const del = card.querySelector('#c-del');
+  if (del) del.onclick = async () => {
+    const i = infoCofrinho(c);
+    if (!confirm(`Excluir o cofrinho "${c.nome}"?` + (i.deps.length ? `\nO histórico de ${i.deps.length} ${i.deps.length > 1 ? 'depósitos' : 'depósito'} também será apagado.` : ''))) return;
+    await DB.lote([{col: 'cofrinhos', id: c.id, del: true}, ...i.deps.map(d => ({col: 'depositos', id: d.id, del: true}))]);
+    registrar(`excluiu o cofrinho ${c.nome}`);
+    fecharSheet(); toast('Cofrinho excluído');
+  };
+}
+function sheetDetalheCofrinho(c){
+  const i = infoCofrinho(c);
+  const deps = i.deps.slice().sort((a, b) => b.em - a.em);
+  const card = abrirSheet(`
+    <h3>${esc(c.emoji || '💰')} ${esc(c.nome)}</h3>
+    <p class="hint">R$ ${mostra(i.guardado, true)} de R$ ${mostra(i.meta, true)} · ${i.pct}%${c.prazo ? ' · até ' + nomeMes(c.prazo) : ''}</p>
+    <button class="btn acc" id="d-guardar">+ Guardei</button>
+    <div class="flabel" style="margin-top:20px">Histórico</div>
+    <div>${deps.length ? deps.map(d => `<div class="dep"><div class="x">${d.uid === meuUid() ? 'Você' : esc(d.quem)} ${Number(d.valor) < 0 ? 'tirou' : 'guardou'}<small>${quando(d.em)}${d.obs ? ' · ' + esc(d.obs) : ''}</small></div>
+        <span class="v ${Number(d.valor) < 0 ? 'neg' : ''}">${Number(d.valor) < 0 ? '−' : '+'} ${mostra(Math.abs(d.valor), true)}</span>
+        <button class="del" data-depdel="${d.id}" aria-label="Apagar">×</button></div>`).join('')
+      : '<div class="nota">Nenhum depósito ainda. Toque em “+ Guardei” quando colocarem dinheiro aqui.</div>'}</div>
+    <button class="btn ghost" id="d-editar" style="margin-top:16px">Editar cofrinho</button>`);
+  card.querySelector('#d-guardar').onclick = () => sheetGuardar(c);
+  card.querySelector('#d-editar').onclick = () => sheetCofrinho(c);
+  card.querySelectorAll('[data-depdel]').forEach(b => b.onclick = async () => {
+    const d = state.depositos.find(x => x.id === b.dataset.depdel); if (!d) return;
+    const copia = {...d}; delete copia.id;
+    await DB.del('depositos', d.id);
+    b.closest('.dep').remove();
+    toast('Depósito apagado', 5000, desfazer(() => DB.set('depositos', d.id, copia)));
+  });
+}
+function sheetGuardar(c){
+  const card = abrirSheet(`
+    <h3>${esc(c.emoji || '💰')} ${esc(c.nome)}</h3>
+    ${seg('tipo', [['guardei', 'Guardei'], ['tirei', 'Tirei']], 'guardei')}
+    <label>Valor<input id="g-valor" inputmode="decimal" placeholder="0,00"></label>
+    <label>Observação (opcional)<input id="g-obs" placeholder="Ex.: sobra do mês, 13º"></label>
+    <button class="btn pri" id="g-ok">Salvar</button>`);
+  setTimeout(() => card.querySelector('#g-valor').focus(), 300);
+  card.querySelector('#g-ok').onclick = async () => {
+    const v = lerValor(val(card, 'g-valor'));
+    if (!v || v <= 0) return toast('Coloca o valor');
+    const tirou = segVal(card, 'tipo') === 'tirei';
+    const antes = infoCofrinho(c);
+    const id = DB.novoId();
+    await DB.set('depositos', id, {cofrinhoId: c.id, valor: tirou ? -v : v, obs: val(card, 'g-obs').trim() || null, quem: meuNome(), uid: meuUid(), em: Date.now()});
+    const idAtv = await registrar(tirou ? `tirou R$ ${dinheiro(v, true)} do cofrinho ${c.nome}` : `guardou R$ ${dinheiro(v, true)} no cofrinho ${c.emoji || ''} ${c.nome}`);
+    fecharSheet();
+    const depois = antes.guardado + (tirou ? -v : v);
+    const undo = desfazer(async () => { await DB.del('depositos', id); if (idAtv) DB.del('atividade', idAtv); });
+    if (!tirou && antes.meta && antes.guardado < antes.meta && depois >= antes.meta){
+      confete(`Meta do cofrinho ${c.nome} batida! 🎉`);
+      if (idAtv) registrar(`completou a meta do cofrinho ${c.nome} 🎉`);
+    } else toast(tirou ? `Tirou R$ ${mostra(v, true)} do cofrinho` : `Guardado! 🐷 R$ ${mostra(v, true)}`, 5000, undo);
+  };
 }
 
 /* ---------- lista de desejos da casa ---------- */
@@ -829,10 +1007,12 @@ async function limparMercado(){
 /* ---------- eventos ---------- */
 document.addEventListener('click', e => {
   if (!DB || e.target.closest('#sheet')) return;
-  const el = e.target.closest('[data-acao],[data-mes],[data-filtro],[data-check],[data-aba],[data-mdel],[data-merc],[data-ddel],[data-dquer],[data-dcomp],.item');
+  const el = e.target.closest('[data-acao],[data-mes],[data-filtro],[data-check],[data-aba],[data-mdel],[data-merc],[data-ddel],[data-dquer],[data-dcomp],[data-guardar],[data-cof],.item');
   if (!el) return;
   if (el.dataset.aba){ state.aba = el.dataset.aba; localStorage.setItem('nc_aba', state.aba); render(); window.scrollTo({top: 0}); return; }
   if (el.dataset.mdel){ tirarDaLista('mercado', el.dataset.mdel); return; }
+  if (el.dataset.guardar){ const c = state.cofrinhos.find(x => x.id === el.dataset.guardar); if (c) sheetGuardar(c); return; }
+  if (el.dataset.cof){ const c = state.cofrinhos.find(x => x.id === el.dataset.cof); if (c) sheetDetalheCofrinho(c); return; }
   if (el.dataset.ddel){ tirarDaLista('desejos', el.dataset.ddel); return; }
   if (el.dataset.dcomp){ const d = state.desejos.find(x => x.id === el.dataset.dcomp); if (d) comprarDesejo(d); return; }
   if (el.dataset.dquer){
@@ -855,6 +1035,7 @@ document.addEventListener('click', e => {
   if (a === 'addMerc') addMercado();
   if (a === 'limparMerc') limparMercado();
   if (a === 'addDesejo') addDesejo();
+  if (a === 'novoCofrinho') sheetCofrinho();
   if (a === 'olho'){ state.oculto = !state.oculto; localStorage.setItem('nc_oculto', state.oculto ? '1' : '0'); render(); }
   if (a === 'importar') importarOutubro();
   if (a === 'verPagas'){ state.verPagas = !state.verPagas; localStorage.setItem('nc_verPagas', state.verPagas ? '1' : '0'); render(); }
@@ -1150,8 +1331,8 @@ function toast(msg, ms, acoes){
   tt = setTimeout(() => t.classList.remove('on'), ms || (acoes && acoes.length ? 5000 : 2200));
 }
 const desfazer = fn => [{rotulo: 'Desfazer', fn}];
-function confete(){
-  toast('Tudo pago esse mês! 🎉');
+function confete(msg){
+  toast(msg || 'Tudo pago esse mês! 🎉', 4000);
   const em = ['🎉','✨','💸','🥂','💛','🎊'];
   for (let i = 0; i < 28; i++){
     const s = document.createElement('span'); s.className = 'cf';
